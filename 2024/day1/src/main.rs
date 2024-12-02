@@ -51,9 +51,6 @@ fn part2(file: &str) -> i32 {
     let (col1, col2) = read_lines(file);
     let mut number_counts: HashMap<i32, i32> = HashMap::new();
 
-    // initialize hashmap
-    col1.iter().map(|x| number_counts.insert(*x, 0));
-
     // Count number appearance in col2
     for value in col2 {
         number_counts
