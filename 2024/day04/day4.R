@@ -3,9 +3,9 @@ library(rlang)
 library(R6)
 library(logger)
 
-x <- readLines("example.txt") %>%
+x <- readLines("input.txt") %>%
   strsplit("")
-mat <- matrix(unlist(x), nrow = length(x), byrow = T)
+mat <- matrix(unlist(x), nrow = length(x), byrow = TRUE)
 
 pos <- R6Class("pos",
         public = list(
@@ -40,6 +40,11 @@ pos <- R6Class("pos",
             if (self$out_of_bounds())
               return(NULL)
             self$m()[self$i(), self$j()]
+          },
+          # returns "" instead of NULL
+          peek_to = function(direction) {
+            on.exit(self$reset())
+            self$scan_to(direction)$peek() %||% ""
           },
           move = function(i,j) {
             private$cur_i <- i
@@ -118,7 +123,8 @@ pos <- R6Class("pos",
                    stop("Unknown direction")
                    )
           },
-          scan_cur = function() {
+          # Scan pattern for part 1
+          scan_cur_pt1 = function() {
 
             if (self$peek() != "X")
               return(self)
@@ -151,9 +157,9 @@ pos <- R6Class("pos",
             }
             self$reset()
           },
-          scan_all = function() {
+          scan_all_pt1 = function() {
             while (TRUE) {
-              self$scan_cur()
+              self$scan_cur_pt1()
               if (is.null(self$step())) {
                 break
               }
@@ -162,7 +168,92 @@ pos <- R6Class("pos",
 
             self
          },
-         n_xmas = 0
+          # Scan pattern for part 2
+          scan_cur_pt2 = function(save_match = FALSE) {
+
+            if (self$peek() != "A")
+              return(self)
+
+            in_match <- FALSE
+            letters <- list("M" = 0, "S" = 0)
+            ul <- NULL
+            for (direction in c("ul", "dr", "ur", "dl")) {
+              log_debug(direction)
+              L <- self$peek_to(direction)
+              in_match <- L %in% c("M", "S")
+
+              if (direction == "ul") {
+                ul <- L
+              }
+
+              # If opposite corners match, break
+              if (direction == "dr") {
+                if (ul == L) {
+                  in_match <- FALSE
+                }
+              }
+
+              if (!in_match) {
+                break
+              }
+
+              # Early exit if we are imbalanced
+              letters[[L]] <- letters[[L]] + 1
+              if (any(unlist(letters) > 2)) {
+                in_match <- FALSE
+                break
+              }
+            }
+
+            if (in_match) {
+              log_debug("match found!")
+              if (save_match) {
+                self$match_p2 <- c(self$match_p2, paste0(self$i(),", ", self$j()))
+              }
+              self$n_pt2 <- self$n_pt2 + 1
+            } else {
+              log_debug("no match")
+            }
+            self$reset()
+          },
+          scan_all_pt2 = function() {
+            while (TRUE) {
+              self$scan_cur_pt2()
+              if (is.null(self$step())) {
+                break
+              }
+              log_debug("next position")
+            }
+            self
+         },
+         scan_all = function() {
+           self$move(1,1)
+           self$scan_all_pt1()
+           self$move(1,1)
+           self$match_p2 <- list()
+           self$scan_all_pt2()
+           self
+         },
+         # view square for pt2 around center
+         view_square = function(i,j) {
+           ir <- (i-1):(i+1)
+           jr <- (j-1):(j+1)
+           self$m()[ir, jr]
+         },
+         # purrr::map(head(unlist(p$match_p2)), p$view_square_str)
+         view_square_str = function(x) {
+           s <- strsplit(x, ", ")[[1]]
+           self$view_square(as.integer(s[1]), as.integer(s[2]))
+         },
+         part1 = function() {
+           self$n_xmas
+         },
+         part2 = function() {
+           self$n_pt2
+         },
+         n_xmas = 0,
+         n_pt2 = 0,
+         match_p2 = list()
         ),
         private = list(
           mat = NULL,
@@ -177,7 +268,6 @@ pos <- R6Class("pos",
 )
 
 
-p <- pos$new(mat, 1, 1)
-p$scan_all()
-print(p$n_xmas)
-
+s <- pos$new(mat)$scan_all()
+print(s$part1())
+print(s$part2())
