@@ -28,6 +28,7 @@ guard <- R6Class("guard",
       private$nrow <- nrow(m)
 
       self$visit() # visit starting position!
+      #private$mat[i, j] <- "." # set start as empty for stepping later
       return(self)
     },
     # record a visit
@@ -42,6 +43,11 @@ guard <- R6Class("guard",
     },
     m = function() {
       private$mat
+    },
+    show = function() {
+      m <- private$mat
+      m[self$i(), self$j()] <- "^"
+      m
     },
     i = function() {
       private$cur_i
@@ -137,21 +143,18 @@ guard <- R6Class("guard",
     step = function() {
       next_tile <- self$scan_to(self$current_direction)$peek()
 
-      EMPTY <- c(".", "^")
-      BLOCKED <- "#"
-
       if (is.null(next_tile)) {
         log_debug("DONE")
         return(NULL)
       }
 
       # Blocked
-      if (next_tile %in% BLOCKED) {
+      if (next_tile == "#") {
         self$reset()$rotate()
       }
 
       # Empty
-      if (next_tile %in% EMPTY) {
+      if (next_tile == ".") {
         # Check if you would loop
         # TODO:
         #self$would_loop(self$i(), self$j())
@@ -234,3 +237,16 @@ g <- guard$new(mat)
 
 g$patrol()
 print(g$part1())
+
+g$step()$step()$show()
+
+
+g$patrol_to(7,5)
+g$n_loop
+g <- guard$new(mat)
+g$patrol()
+g$.__enclos_env__$private$cur_i <- 7
+g$.__enclos_env__$private$cur_j <- 7
+g$current_direction <- "l"
+self <- g
+g
