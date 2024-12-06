@@ -46,7 +46,7 @@ guard <- R6Class("guard",
     },
     show = function() {
       m <- private$mat
-      m[self$i(), self$j()] <- "^"
+      m[self$i(), self$j()] <- paste0("O", self$current_direction)
       m
     },
     i = function() {
@@ -121,16 +121,15 @@ guard <- R6Class("guard",
       self$current_direction <- self$next_rotation()
       self
     },
-    # Would we loop if an object was here?
-    would_loop = function() {
-
-      i <- self$i()
+    # have we visited this cursor position before w/ current direction?
+    in_loop = function() {
+      i <- self$i() # cast so identical() check works below
       j <- self$j()
 
       # Find prev paths
       prev_idx <- self$visited_locations() %>%
         map("position") %>%
-        map_lgl(identical, c(i,j))
+        map_lgl(~{all(.x == c(i,j))})
 
       # If would rotate into prev direction @ path
       prev_dirs <- self$visited_locations()[prev_idx] %>%
@@ -138,10 +137,37 @@ guard <- R6Class("guard",
         .$direction %>%
         unlist
 
-      self$next_rotation() %in% prev_dirs
+      self$current_direction %in% prev_dirs
     },
-    step = function() {
+    # Would we loop if an object was here?
+    would_loop = function() {
+      init_dir <- self$current_direction
+      # can't rely on reset
+      i_i <- self$i()
+      i_j <- self$j()
+      on.exit({
+        # Reset direction
+        self$current_direction <- init_dir
+        private$cur_i <- i_i
+        private$cur_j <- i_j
+      })
+
+      self$rotate() # hallucinate an obstacle
+      in_loop <- self$in_loop()
+      while (!in_loop) {
+        if (is.null(self$step(commit=FALSE)))
+          break
+        in_loop <- self$in_loop()
+      }
+
+      in_loop
+    },
+    # commit = FALSE is similar to scanning w/ the step logic
+    step = function(commit=TRUE) {
       next_tile <- self$scan_to(self$current_direction)$peek()
+
+      BLOCKED <- "#"
+      EMPTY <- c(".", "^")
 
       if (is.null(next_tile)) {
         log_debug("DONE")
@@ -149,23 +175,26 @@ guard <- R6Class("guard",
       }
 
       # Blocked
-      if (next_tile == "#") {
+      if (next_tile %in% BLOCKED) {
         self$reset()$rotate()
       }
 
       # Empty
-      if (next_tile == ".") {
+      if (next_tile %in% EMPTY) {
+      #if (next_tile == ".") {
         # Check if you would loop
         # TODO:
         #self$would_loop(self$i(), self$j())
-        if (self$would_loop()) {
-          self$n_loop <- self$n_loop + 1
-        }
 
-        # Commit the step
-        private$init_i <- self$i()
-        private$init_j <- self$j()
-        self$visit()
+        if (commit) {
+          if (self$would_loop()) {
+            self$n_loop <- self$n_loop + 1
+          }
+          # Commit the step
+          self$visit()
+          private$init_i <- self$i()
+          private$init_j <- self$j()
+        }
       }
 
       self
@@ -212,6 +241,7 @@ guard <- R6Class("guard",
     part1 = function() {
       self$visited_locations() %>%
         map("position") %>%
+        map_chr(paste0, collapse=",") %>%
         unique %>%
         length
     },
