@@ -54,21 +54,24 @@ pmax <- map(eqns, "values") %>%
 ops_cache <- map(seq(1,pmax), get_perm, values = c("*", "+"))
 
 # Part 1
-keep(eqns, check_ops, ops_cache = ops_cache) %>%
+p1_check <- map_lgl(eqns, check_ops, ops_cache = ops_cache)
+
+part1 <- keep(eqns, p1_check) %>%
   map_dbl("result") %>%
-  sum %>%
-  print
+  sum
+print(part1)
 
 ops_cache_pt2 <- map(seq(1,pmax), get_perm, values = c("*", "+", "||"))
 
 # Part 2
-p2 <- future_map_lgl(eqns, check_ops, ops_cache = ops_cache_pt2)
-#system.time(p2 <- future_map_lgl(eqns, check_ops, ops_cache = ops_cache_pt2))
-#    user   system  elapsed
-#1330.485    3.956  151.485
-eqns %>%
-  keep(p2) %>%
+p2_eqns <- discard(eqns, p1_check)
+system.time(p2_check <- future_map_lgl(p2_eqns, check_ops, ops_cache = ops_cache_pt2))
+#    user  system elapsed
+#772.144   3.210  91.672
+p2_sum <- p2_eqns %>%
+  keep(p2_check) %>%
   map_dbl("result") %>%
-  sum %>%
-  print
+  sum
 
+part2 <- part1 + p2_sum
+print(part2)
