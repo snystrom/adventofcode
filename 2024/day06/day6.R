@@ -3,9 +3,14 @@ library(rlang)
 library(R6)
 library(logger)
 library(purrr)
+
+library(furrr)
+plan("multicore", workers = 13)
+
 logger::log_threshold(DEBUG)
 
 #x <- readLines("input.txt") %>%
+#x <- readLines("input2.txt") %>%
 x <- readLines("example.txt") %>%
   strsplit("")
 mat <- matrix(unlist(x), nrow = length(x), byrow = TRUE)
@@ -233,8 +238,6 @@ guard <- R6Class("guard",
         private$cur_j <- i_j
       })
 
-      check_visit <- self$blank_visited_mat()
-
       # Get location of hypothetical obstacle
       self$scan_to(self$current_direction)
 
@@ -254,7 +257,7 @@ guard <- R6Class("guard",
       ob_j <- self$j()
       self$reset()
 
-      log_debug("SIMULATING OBJSTACLE AT: {ob_i}, {ob_j}")
+      log_trace("SIMULATING OBJSTACLE AT: {ob_i}, {ob_j}")
       #if (ob_i == 7 && ob_j == 4) {
       #  browser()
       #}
@@ -290,7 +293,7 @@ guard <- R6Class("guard",
 
       # If this path loops, record it as visited
       if (in_loop) {
-        log_debug("SAVE LOOP OBJ")
+        #log_debug("SAVE LOOP OBJ")
         private$loop_loc[ob_i, ob_j] <- TRUE
       }
 
@@ -358,6 +361,37 @@ guard <- R6Class("guard",
       while (!is.null(self$step(check_loop = check_loop)))
         next
     },
+    patrol_brute_force = function(path_length) {
+      i <- 0
+      start_check <- TRUE
+      do_check <- FALSE
+      while (!is.null(self$step())) {
+
+        # Really dumb hack
+        # this is not guaranteed to be correct
+        if (i > path_length && start_check) {
+          check_i <- self$i()
+          check_j <- self$j()
+          check_dir <- self$current_direction
+          start_check <- FALSE
+          do_check <- TRUE
+          seen_i <- 1
+          seen_j <- 1
+        } else if (do_check) {
+          if (self$i() == check_i && self$j() == check_j && self$current_direction == check_dir) {
+            seen_i <- seen_i + 1
+            seen_j <- seen_j + 1
+          }
+
+          if (seen_i > 1 && seen_j > 1) {
+            self$n_loop <- self$n_loop + 1
+            break
+          }
+        }
+
+        i <- i +1
+      }
+    },
     patrol_draw = function() {
       while (!is.null(self$step())) {
         print(self$show())
@@ -411,7 +445,39 @@ guard <- R6Class("guard",
 
 
 g <- guard$new(mat)
-g$patrol(T)
+g$patrol(T) # 2848 - WRONG
+
+g <- guard$new(mat)
+g$patrol()
+# Get path indices (minus start loc)
+vp <- g$visited_positions()
+vp[g$start_i, g$start_j] <- FALSE
+visit_minus_start <- which(vp, arr.ind = TRUE)
+test_mats <- map(split(visit_minus_start, row(visit_minus_start)), ~{
+                 m <- mat
+                 m[.x[[1]], .x[[2]]] <- "#"
+                 m
+})
+path_length <- g$part1()
+res <- future_map(test_mats, ~{
+  g <- guard$new(.x)
+  g$patrol_brute_force(path_length)
+  g$reset()
+  g
+})
+
+map_int(res, "n_loop") %>%
+  sum
+
+res[[1]]$displ()
+res[[2]]$displ()
+res[[3]]$displ()
+res[[3]]$m()
+res[[19]]$m()
+
+vl <- g$visited_locations()
+which(vl == TRUE, arr.ind = TRUE)
+
 sum(g$.__enclos_env__$private$loop_loc)
 g$reset()$displ()
 g$reset()$displ()
