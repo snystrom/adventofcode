@@ -9,9 +9,9 @@ plan("multicore", workers = 13)
 
 logger::log_threshold(DEBUG)
 
-#x <- readLines("input.txt") %>%
+x <- readLines("input.txt") %>%
 #x <- readLines("input2.txt") %>%
-x <- readLines("example.txt") %>%
+#x <- readLines("example.txt") %>%
   strsplit("")
 mat <- matrix(unlist(x), nrow = length(x), byrow = TRUE)
 
@@ -312,7 +312,7 @@ guard <- R6Class("guard",
       EMPTY <- c(".", "^")
 
       if (is.null(next_tile)) {
-        log_debug("DONE")
+        log_debug("DONE: {x}")
         return(NULL)
       }
 
@@ -361,11 +361,20 @@ guard <- R6Class("guard",
       while (!is.null(self$step(check_loop = check_loop)))
         next
     },
-    patrol_brute_force = function(path_length) {
+    patrol_brute_force = function() {
       i <- 0
       start_check <- TRUE
       do_check <- FALSE
+
+      size <- ncol(self$m()) * nrow(self$m())
+      max_size <- size / 2
       while (!is.null(self$step())) {
+
+        if (i > max_size) {
+          log_info("Break On iters: {i}, assume loop")
+          self$n_loop <- self$n_loop + 1
+          break
+        }
 
         # Really dumb hack
         # this is not guaranteed to be correct
@@ -391,6 +400,8 @@ guard <- R6Class("guard",
 
         i <- i +1
       }
+      log_info("COMPLETE: {x}", x = self$part1())
+      self
     },
     patrol_draw = function() {
       while (!is.null(self$step())) {
@@ -447,10 +458,34 @@ guard <- R6Class("guard",
 g <- guard$new(mat)
 g$patrol(T) # 2848 - WRONG
 
+
+
+get_maze_walls <- function(path_matrix) {
+  walls_matrix <- matrix(FALSE, nrow = nrow(path_matrix), ncol = ncol(path_matrix))
+
+  # Iterate through the path_matrix and set the surrounding cells as walls
+  for (i in 1:nrow(path_matrix)) {
+    for (j in 1:ncol(path_matrix)) {
+      if (path_matrix[i, j]) {
+        # If the current cell is part of the path, set the surrounding cells as walls
+        if (i > 1) walls_matrix[i-1, j] <- TRUE
+        if (i < nrow(path_matrix)) walls_matrix[i+1, j] <- TRUE
+        if (j > 1) walls_matrix[i, j-1] <- TRUE
+        if (j < ncol(path_matrix)) walls_matrix[i, j+1] <- TRUE
+      }
+    }
+  }
+
+  return(walls_matrix)
+}
+
 g <- guard$new(mat)
 g$patrol()
+
 # Get path indices (minus start loc)
 vp <- g$visited_positions()
+walls <- get_maze_walls(vp)
+vp <- vp | walls # merge surrounding positions
 vp[g$start_i, g$start_j] <- FALSE
 visit_minus_start <- which(vp, arr.ind = TRUE)
 test_mats <- map(split(visit_minus_start, row(visit_minus_start)), ~{
@@ -459,155 +494,24 @@ test_mats <- map(split(visit_minus_start, row(visit_minus_start)), ~{
                  m
 })
 path_length <- g$part1()
+# NOTE: this won't be right, because it
+# is only testing in the path, not alongside,
+# ex pos+1 for the "walls" of the path
+#
+# For reference, this gives 1663,
+# seems too low.
+log_threshold(INFO)
+system.time(
 res <- future_map(test_mats, ~{
-  g <- guard$new(.x)
-  g$patrol_brute_force(path_length)
-  g$reset()
-  g
+  brute_guard <- guard$new(.x)
+  brute_guard$patrol_brute_force()
+  brute_guard$reset()
 })
+)
 
+# Part2 lol that worked and it was correct w/o the maze wall thing, too.
+# I never tried it cause I was rate limited
 map_int(res, "n_loop") %>%
   sum
 
-res[[1]]$displ()
-res[[2]]$displ()
-res[[3]]$displ()
-res[[3]]$m()
-res[[19]]$m()
 
-vl <- g$visited_locations()
-which(vl == TRUE, arr.ind = TRUE)
-
-sum(g$.__enclos_env__$private$loop_loc)
-g$reset()$displ()
-g$reset()$displ()
-
-# TEST would loop
-g <- guard$new(mat)
-g$patrol_to(7,7)
-g$patrol_to(6,7)$step()
-g$displ()
-
-self <- g$.__enclos_env__$self
-private <- g$.__enclos_env__$private
-
-# Missing loop
-g <- guard$new(mat)
-g$patrol_to(7,4, check_loop=TRUE)$displ()
-g$patrol_to(7,7, check_loop=TRUE)$displ()
-g$step(check_loop = TRUE)$displ()
-g$step(check_loop = TRUE)$displ()
-g$step(check_loop = TRUE)$displ()
-g$would_loop()
-g$patrol_to(6,7)$step()
-g$patrol_to(6,7)$step()
-g$displ()
-
-# Missing loop
-g <- guard$new(mat)
-g$patrol_to(8,6, check_loop = TRUE)$displ()
-g$step()$displ()
-#g$would_loop()
-# TODO: is it because I don't record rotation as both d & l (ex)
-#g$displ()
-
-self <- g$.__enclos_env__$self
-private <- g$.__enclos_env__$private
-##########
-g$patrol_to(7,7)
-g$patrol()
-g$part1()
-g$n_loop
-
-
-g <- guard$new(mat)
-g$patrol(TRUE)
-g$n_loop
-sum(g$.__enclos_env__$private$loop_loc)
-g$displ()
-
-L <- g$.__enclos_env__$private$loop_loc %>%
-  lapply(apply, 1, as.integer)
-sum(L$d + L$l + L$r + L$u)
-
-g$n_loop
-L <- g$.__enclos_env__$private$loop_loc$d |
-g$.__enclos_env__$private$loop_loc$l |
-g$.__enclos_env__$private$loop_loc$r |
-g$.__enclos_env__$private$loop_loc$u
-
-apply(g$.__enclos_env__$private$loop_loc$d, 1, as.integer)
-g$.__enclos_env__$private$loop_loc$l +
-g$.__enclos_env__$private$loop_loc$r +
-g$.__enclos_env__$private$loop_loc$u
-
-any(L & (g$m() == "#"))
-# 3221 - WRONG too high
-# 225 - WRONG too low (no code changes?? - bug)
-# 4563 - WRONG too high
-g$n_loop
-g$visited_positions()
-
-logger::log_threshold(DEBUG)
-g <- guard$new(mat)
-# Start: 11:15:08
-#    user   system  elapsed
-#4260.129    0.932 4261.722
-system.time(g$patrol())
-sum(g$visited_positions())
-g$.__enclos_env__$private$visit_loc
-g$n_loop
-
-
-
-
-
-
-
-
-
-logger::log_threshold(DEBUG)
-g <- guard$new(mat)
-g$patrol(T)
-g$part1()
-g$n_loop
-g <- guard$new(mat)
-g$patrol()
-g$n_loop
-
-g$restart()
-g$patrol(TRUE)
-g$n_loop
-logger::log_threshold(FATAL)
-g$patrol_draw()
-print(g$part1())
-g$n_loop
-
-
-!(extra_visit %in% correct_visit)
-unlist(extra_visit)
-unlist(correct_visit)
-
-g$step()$step()$show()
-
-
-g$patrol_to(7,5)
-g$n_loop
-g <- guard$new(mat)
-g$patrol()
-g$.__enclos_env__$private$cur_i <- 7
-g$.__enclos_env__$private$cur_j <- 7
-g$.__enclos_env__$private$init_i <- 7
-g$.__enclos_env__$private$init_j <- 7
-g$current_direction <- "l"
-self <- g
-g
-
-self$visited_locations() %>%
-  map("position") %>%
-  map_chr(paste0, collapse=",")
-  unique()
-  unique
-  length
-x <- duplicated(ps)
-ps[x]
