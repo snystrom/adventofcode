@@ -3,6 +3,7 @@ library(rlang)
 library(R6)
 library(logger)
 library(purrr)
+logger::log_threshold(DEBUG)
 
 #x <- readLines("input.txt") %>%
 x <- readLines("example.txt") %>%
@@ -20,6 +21,7 @@ guard <- R6Class("guard",
       self$start_i <- i
       self$start_j <- j
       private$mat <- m
+      self$path <- list()
       private$cur_i <- i
       private$cur_j <- j
       private$init_i <- i
@@ -27,18 +29,63 @@ guard <- R6Class("guard",
       private$ncol <- ncol(m)
       private$nrow <- nrow(m)
 
+
+      self$init_visited_mat()
+      self$init_loop_check_mat()
+
       self$visit() # visit starting position!
       #private$mat[i, j] <- "." # set start as empty for stepping later
       return(self)
     },
-    # record a visit
-    # record current position & direction
+    # blank bool matrix
+    blank_visited_mat = function() {
+      im <- matrix(FALSE, ncol = ncol(self$m()), nrow = nrow(self$m()))
+      list("u" = im,
+           "l" = im,
+           "r" = im,
+           "d" = im
+           )
+    },
+    init_visited_mat = function() {
+      private$visit_loc <- self$blank_visited_mat()
+      self
+    },
+    init_loop_check_mat = function() {
+      private$loop_loc <- self$blank_visited_mat()[[1]]
+      private$tested_loop_loc <- self$blank_visited_mat()[[2]]
+      self
+    },
+    # go back to start
+    restart = function(clear=FALSE) {
+      self$move(self$start_i, self$start_j)
+      self$current_direction <- "u"
+      private$init_i <- self$i()
+      private$init_j <- self$j()
+      self$n_loop <- 0
+
+      if (clear) {
+        self$init_visited_mat()
+        self$init_loop_check_mat()
+      }
+
+      self
+    },
+    visited_positions = function() {
+      private$visit_loc$u |
+      private$visit_loc$l |
+      private$visit_loc$r |
+      private$visit_loc$d
+    },
+    # check if visited
+    visited = function() {
+
+      if (self$out_of_bounds()) {
+        return(FALSE)
+      }
+      private$visit_loc[[self$current_direction]][self$i(), self$j()]
+    },
     visit = function() {
-      i <- private$cur_i
-      j <- private$cur_j
-      private$visited <- c(private$visited, list(list(position = c(i,j),
-                                                 direction = self$current_direction
-                                                 )))
+      private$visit_loc[[self$current_direction]][self$i(), self$j()] <- TRUE
       self
     },
     m = function() {
@@ -46,8 +93,31 @@ guard <- R6Class("guard",
     },
     show = function() {
       m <- private$mat
-      m[self$i(), self$j()] <- paste0("O", self$current_direction)
+      m[self$i(), self$j()] <- paste0("G", self$current_direction)
       m
+    },
+    # show with path
+    displ = function(loops=TRUE) {
+      m <- self$show()
+      horiz <- (private$visit_loc$l | private$visit_loc$r) & !(private$visit_loc$u | private$visit_loc$d)
+      vert <- !(private$visit_loc$l | private$visit_loc$r) & (private$visit_loc$u | private$visit_loc$d)
+      both <- self$visited_positions() & !(horiz | vert)
+      #loop <- private$loop_loc$d |
+      #  private$loop_loc$l |
+      #  private$loop_loc$r |
+      #  private$loop_loc$u
+      loop <- private$loop_loc
+      m[horiz] <- "-"
+      m[vert] <- "|"
+      m[both] <- "+"
+      if (loops)
+        m[loop] <- "O"
+      #m[self$i(), self$j()] <- paste0("G", self$current_direction)
+      m[self$i(), self$j()] <- self$current_direction
+      cat("\n")
+      walk(apply(m,1, paste0, collapse=""), cat, "\n")
+      cat("\n")
+
     },
     i = function() {
       private$cur_i
@@ -122,8 +192,8 @@ guard <- R6Class("guard",
       self
     },
     # have we visited this cursor position before w/ current direction?
-    in_loop = function() {
-      i <- self$i() # cast so identical() check works below
+    og_in_loop = function() {
+      i <- self$i()
       j <- self$j()
 
       # Find prev paths
@@ -139,6 +209,17 @@ guard <- R6Class("guard",
 
       self$current_direction %in% prev_dirs
     },
+    in_loop2 = function() {
+
+      i <- self$i() # cast so identical() check works below
+      j <- self$j()
+
+      path_tile <- self$path[[toString(c(i,j))]] %||% ""
+      self$current_direction %in% path_tile
+    },
+    in_loop = function() {
+      self$visited()
+    },
     # Would we loop if an object was here?
     would_loop = function() {
       init_dir <- self$current_direction
@@ -152,19 +233,77 @@ guard <- R6Class("guard",
         private$cur_j <- i_j
       })
 
+      check_visit <- self$blank_visited_mat()
+
+      # Get location of hypothetical obstacle
+      self$scan_to(self$current_direction)
+
+      # Obstacles are not allowed past edges,
+      # so we're not in a loop
+      if (self$out_of_bounds()) {
+        self$reset()
+        return(FALSE)
+      }
+
+      # NOTE: i think step() is already handling this, but in case, let's not mark existing
+      # obstacles
+      if (self$peek() == "#") # only checking loops w/ new obstacles
+        return(FALSE)
+
+      ob_i <- self$i()
+      ob_j <- self$j()
+      self$reset()
+
+      log_debug("SIMULATING OBJSTACLE AT: {ob_i}, {ob_j}")
+      #if (ob_i == 7 && ob_j == 4) {
+      #  browser()
+      #}
+
+      # Skip if this is the start position (forbidden)
+      if (self$start_i == ob_i && self$start_j == ob_j){
+        self$reset()
+        return(FALSE)
+      }
+
+      # Skip if already tested (we can't insert an obstacle after we pass it)
+      if (isTRUE(private$tested_loop_loc[ob_i, ob_j])) {
+        self$reset()
+        return(FALSE)
+      }
+
       self$rotate() # hallucinate an obstacle
+      #if (i_i == 21 && i_j == 79 && init_dir == "l")
+      #  browser()
+
+      log_debug("check loop at: {i_i}, {i_j}, {init_dir}->{d}", d = self$current_direction)
+
       in_loop <- self$in_loop()
       while (!in_loop) {
-        if (is.null(self$step(commit=FALSE)))
+        if (is.null(self$step(commit=FALSE))) {
+          in_loop <- self$in_loop()
+          log_debug("break! in loop? {in_loop}")
           break
+        }
+        #in_loop <- self$in_loop2()
         in_loop <- self$in_loop()
       }
 
-      in_loop
+      # If this path loops, record it as visited
+      if (in_loop) {
+        log_debug("SAVE LOOP OBJ")
+        private$loop_loc[ob_i, ob_j] <- TRUE
+      }
+
+      log_debug("In loop? {in_loop}")
+      self$reset()
+      # record that we tested
+      private$tested_loop_loc[ob_i, ob_j] <- TRUE
+      return(in_loop)
     },
     # commit = FALSE is similar to scanning w/ the step logic
-    step = function(commit=TRUE) {
+    step = function(commit=TRUE, check_loop=FALSE) {
       next_tile <- self$scan_to(self$current_direction)$peek()
+      logger::log_trace("step to: {i}, {j}", i = self$i(), j = self$j())
 
       BLOCKED <- "#"
       EMPTY <- c(".", "^")
@@ -175,25 +314,27 @@ guard <- R6Class("guard",
       }
 
       # Blocked
+      # blocked tiles cannot be visited so these will always be len=1
       if (next_tile %in% BLOCKED) {
         self$reset()$rotate()
+        if (commit)
+          self$visit() # record both directions as visited @ cur
       }
 
       # Empty
       if (next_tile %in% EMPTY) {
-      #if (next_tile == ".") {
-        # Check if you would loop
-        # TODO:
-        #self$would_loop(self$i(), self$j())
 
         if (commit) {
-          if (self$would_loop()) {
-            self$n_loop <- self$n_loop + 1
-          }
           # Commit the step
           self$visit()
           private$init_i <- self$i()
           private$init_j <- self$j()
+
+          if (check_loop) {
+            if (self$would_loop()) {
+                self$n_loop <- self$n_loop + 1
+            }
+          }
         }
       }
 
@@ -213,43 +354,46 @@ guard <- R6Class("guard",
         stop("Unknown direction")
       )
     },
-    patrol = function() {
-      while (!is.null(self$step()))
+    patrol = function(check_loop=FALSE) {
+      while (!is.null(self$step(check_loop = check_loop)))
         next
     },
-    patrol_to = function(i,j) {
+    patrol_draw = function() {
       while (!is.null(self$step())) {
-        if (identical(c(i,j), self$i(), self$j()))
-            break
+        print(self$show())
         next
       }
     },
-    visited_locations = function(include_start = FALSE) {
-      v <- private$visited
-      if (include_start) {
-        v <- c(list(list(position = c(self$start_i,
-                                 self$start_j
-                                 ),
-                    direction = self$start_direction
-                    )
-               ),
-          v
-          )
+    patrol_to = function(i,j, ...) {
+      while (TRUE) {
+        s <- self$step(...)
+
+        log_debug("{i}, {j}", i=self$i(), j=self$j())
+        if (self$i() == i && self$j() == j) {
+          break
+        }
+
+        if (is.null(s)) {
+          log_debug("break")
+          break
+        }
       }
-      v
+      self
+    },
+    visited_locations = function() {
+      private$visit_loc
     },
     part1 = function() {
-      self$visited_locations() %>%
-        map("position") %>%
-        map_chr(paste0, collapse=",") %>%
-        unique %>%
-        length
+      self$visited_positions() %>%
+        sum()
     },
     current_direction = NULL,
     n_loop = 0,
     start_i = NULL,
     start_j = NULL,
-    start_direction = NULL
+    start_direction = NULL,
+    # holds the path taken
+    path = NULL
   ),
   private = list(
     mat = NULL,
@@ -259,14 +403,124 @@ guard <- R6Class("guard",
     init_j = NULL,
     cur_i = NULL,
     cur_j = NULL,
-    visited = list()
+    visit_loc = NULL,
+    loop_loc = NULL,
+    tested_loop_loc = NULL
   )
 )
 
-g <- guard$new(mat)
 
+g <- guard$new(mat)
+g$patrol(T)
+sum(g$.__enclos_env__$private$loop_loc)
+g$reset()$displ()
+g$reset()$displ()
+
+# TEST would loop
+g <- guard$new(mat)
+g$patrol_to(7,7)
+g$patrol_to(6,7)$step()
+g$displ()
+
+self <- g$.__enclos_env__$self
+private <- g$.__enclos_env__$private
+
+# Missing loop
+g <- guard$new(mat)
+g$patrol_to(7,4, check_loop=TRUE)$displ()
+g$patrol_to(7,7, check_loop=TRUE)$displ()
+g$step(check_loop = TRUE)$displ()
+g$step(check_loop = TRUE)$displ()
+g$step(check_loop = TRUE)$displ()
+g$would_loop()
+g$patrol_to(6,7)$step()
+g$patrol_to(6,7)$step()
+g$displ()
+
+# Missing loop
+g <- guard$new(mat)
+g$patrol_to(8,6, check_loop = TRUE)$displ()
+g$step()$displ()
+#g$would_loop()
+# TODO: is it because I don't record rotation as both d & l (ex)
+#g$displ()
+
+self <- g$.__enclos_env__$self
+private <- g$.__enclos_env__$private
+##########
+g$patrol_to(7,7)
 g$patrol()
+g$part1()
+g$n_loop
+
+
+g <- guard$new(mat)
+g$patrol(TRUE)
+g$n_loop
+sum(g$.__enclos_env__$private$loop_loc)
+g$displ()
+
+L <- g$.__enclos_env__$private$loop_loc %>%
+  lapply(apply, 1, as.integer)
+sum(L$d + L$l + L$r + L$u)
+
+g$n_loop
+L <- g$.__enclos_env__$private$loop_loc$d |
+g$.__enclos_env__$private$loop_loc$l |
+g$.__enclos_env__$private$loop_loc$r |
+g$.__enclos_env__$private$loop_loc$u
+
+apply(g$.__enclos_env__$private$loop_loc$d, 1, as.integer)
+g$.__enclos_env__$private$loop_loc$l +
+g$.__enclos_env__$private$loop_loc$r +
+g$.__enclos_env__$private$loop_loc$u
+
+any(L & (g$m() == "#"))
+# 3221 - WRONG too high
+# 225 - WRONG too low (no code changes?? - bug)
+# 4563 - WRONG too high
+g$n_loop
+g$visited_positions()
+
+logger::log_threshold(DEBUG)
+g <- guard$new(mat)
+# Start: 11:15:08
+#    user   system  elapsed
+#4260.129    0.932 4261.722
+system.time(g$patrol())
+sum(g$visited_positions())
+g$.__enclos_env__$private$visit_loc
+g$n_loop
+
+
+
+
+
+
+
+
+
+logger::log_threshold(DEBUG)
+g <- guard$new(mat)
+g$patrol(T)
+g$part1()
+g$n_loop
+g <- guard$new(mat)
+g$patrol()
+g$n_loop
+
+g$restart()
+g$patrol(TRUE)
+g$n_loop
+logger::log_threshold(FATAL)
+g$patrol_draw()
 print(g$part1())
+g$n_loop
+
+
+!(extra_visit %in% correct_visit)
+unlist(extra_visit)
+unlist(correct_visit)
 
 g$step()$step()$show()
 
@@ -277,6 +531,17 @@ g <- guard$new(mat)
 g$patrol()
 g$.__enclos_env__$private$cur_i <- 7
 g$.__enclos_env__$private$cur_j <- 7
+g$.__enclos_env__$private$init_i <- 7
+g$.__enclos_env__$private$init_j <- 7
 g$current_direction <- "l"
 self <- g
 g
+
+self$visited_locations() %>%
+  map("position") %>%
+  map_chr(paste0, collapse=",")
+  unique()
+  unique
+  length
+x <- duplicated(ps)
+ps[x]
