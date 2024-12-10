@@ -148,7 +148,7 @@ guard <- R6Class("guard",
     },
     # returns "" instead of NULL
     peek_to = function(direction) {
-      on.exit(self$reset())
+      on.exit(self$reset(), add = TRUE)
       self$scan_to(direction)$peek() %||% ""
     },
     move = function(i, j) {
@@ -236,7 +236,7 @@ guard <- R6Class("guard",
         self$current_direction <- init_dir
         private$cur_i <- i_i
         private$cur_j <- i_j
-      })
+      }, add = TRUE)
 
       # Get location of hypothetical obstacle
       self$scan_to(self$current_direction)
@@ -312,7 +312,7 @@ guard <- R6Class("guard",
       EMPTY <- c(".", "^")
 
       if (is.null(next_tile)) {
-        log_debug("DONE: {x}")
+        log_debug("DONE")
         return(NULL)
       }
 
@@ -457,35 +457,15 @@ guard <- R6Class("guard",
 
 g <- guard$new(mat)
 g$patrol(T) # 2848 - WRONG
+g$n_loop
 
 
-
-get_maze_walls <- function(path_matrix) {
-  walls_matrix <- matrix(FALSE, nrow = nrow(path_matrix), ncol = ncol(path_matrix))
-
-  # Iterate through the path_matrix and set the surrounding cells as walls
-  for (i in 1:nrow(path_matrix)) {
-    for (j in 1:ncol(path_matrix)) {
-      if (path_matrix[i, j]) {
-        # If the current cell is part of the path, set the surrounding cells as walls
-        if (i > 1) walls_matrix[i-1, j] <- TRUE
-        if (i < nrow(path_matrix)) walls_matrix[i+1, j] <- TRUE
-        if (j > 1) walls_matrix[i, j-1] <- TRUE
-        if (j < ncol(path_matrix)) walls_matrix[i, j+1] <- TRUE
-      }
-    }
-  }
-
-  return(walls_matrix)
-}
 
 g <- guard$new(mat)
 g$patrol()
 
 # Get path indices (minus start loc)
 vp <- g$visited_positions()
-walls <- get_maze_walls(vp)
-vp <- vp | walls # merge surrounding positions
 vp[g$start_i, g$start_j] <- FALSE
 visit_minus_start <- which(vp, arr.ind = TRUE)
 test_mats <- map(split(visit_minus_start, row(visit_minus_start)), ~{
@@ -515,3 +495,8 @@ map_int(res, "n_loop") %>%
   sum
 
 
+
+mw <- get_maze_walls(g$visited_positions())
+mm <- g$m()
+mm[which(mw, arr.ind = T)] <- "="
+mm
