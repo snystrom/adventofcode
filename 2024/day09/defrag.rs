@@ -38,6 +38,14 @@ fn decompress(raw_disk: Vec<i32>) -> Vec<Option<i64>> {
     v
 }
 
+fn compute_checksum(disk: &Vec<Option<i64>>) -> i64 {
+    disk.iter()
+        .enumerate()
+        .filter(|(_, val)| val.is_some())
+        .map(|(idx, val)| idx as i64 * val.expect("must be an i64"))
+        .sum()
+}
+
 fn part1() {
     //let mut disk = ["0", ".", ".", "1", "1", "1", ".", ".", ".", ".", "2", "2", "2", "2", "2"];
     //let mut disk = ["0", "0", ".", ".", ".", "1", "1", "1", ".", ".", ".", "2", ".", ".", ".", "3", "3", "3", ".", "4", "4", ".", "5", "5", "5", "5", ".", "6", "6", "6", "6", ".", "7", "7", "7", ".", "8", "8", "8", "8", "9", "9"];
@@ -49,7 +57,7 @@ fn part1() {
     //println!("decompress into:");
     let mut disk = decompress(dl);
 
-    println!("{disk:?}");
+    //println!("{disk:?}");
     let empty_loc : Vec<usize> = disk.iter()
         .enumerate()
         .filter(|(_, value)| value.is_none())
@@ -73,7 +81,7 @@ fn part1() {
         }
         disk.swap(*empty,*occ);
     }
-    println!("{disk:?}");
+    //println!("{disk:?}");
 
     let part1 : i64 = disk.iter()
         .enumerate()
@@ -166,24 +174,24 @@ fn get_file_blocks(disk: &Vec<Option<i64>>) -> BTreeMap::<usize, Vec<usize>> {
 }
 
 fn part2() {
-    //let mut disk = decompress(read_disk("input.txt"));
-    let mut disk = decompress(read_disk("example.txt"));
+    let mut disk = decompress(read_disk("input.txt"));
+    //let mut disk = decompress(read_disk("example.txt"));
     //println!("{disk:?}");
 
 
     let mut empty_disk_blocks = get_empty_block_map(&disk);
-    println!("{empty_disk_blocks:?}");
+    //println!("{empty_disk_blocks:?}");
 
 
     let mut file_blocks = get_file_blocks(&disk);
-    println!("{file_blocks:?}");
+    //println!("{file_blocks:?}");
 
     for (file_id, file) in file_blocks.iter_mut().rev() {
-        println!("file_id: {file_id}");
+        //println!("file_id: {file_id}");
         let mut has_moved = false;
         for (empty_id, empty) in empty_disk_blocks.iter_mut() {
-            println!("empty_id: {empty_id}");
-            println!("{empty:?}");
+            //println!("empty_id: {empty_id}");
+            //println!("{empty:?}");
             if empty.len() >= file.len() {
 
                 // TODO: while let Some(i) = file.pop()
@@ -192,7 +200,7 @@ fn part2() {
                     if (*i < j) {
                         break
                     }
-                    println!("file_i: {i}, empty_j: {j}");
+                    //println!("file_i: {i}, empty_j: {j}");
                     disk.swap(*i,j);
                 }
                 has_moved = true;
@@ -203,7 +211,7 @@ fn part2() {
         }
     }
 
-    println!("{disk:?}");
+    //println!("{disk:?}");
 
     let x = disk.iter()
         .map(|x| match x {
@@ -213,59 +221,10 @@ fn part2() {
         .collect::<Vec<_>>()
         .join("");
 
-    println!("{x}");
+    //println!("{x}");
 
-
-
-
-
-
-
-    // for each file, check whether
-    //for loc in occ_loc {
-
-    //}
-
-    //let empty_blocks = disk.split_mut(|x| x.is_some());
-
-    //for empty in empty_blocks {
-    //    empty.len()
-
-    //}
-
-
-    /*
-    for block in file_blocks {
-        // TODO: get file boundaries in a block
-        let cur_file_id = block.last().expect("can't get last");
-
-        let cur_file_len = block.iter()
-            .rev()
-            .take_while(|x| *x == cur_file_id)
-            .count();
-
-        let cur_file_idx_iter = block.iter()
-            .rev()
-            .enumerate()
-            .take_while(|(_,value)| *value == cur_file_id)
-            .map(|(idx, _)| idx);
-
-
-        let empty_blocks = disk.split_mut(|x| x.is_some());
-
-        for empty in empty_blocks {
-            if empty.len() >= cur_file_len {
-                let mut ei = 0;
-                for i in cur_file_idx_iter {
-                    empty[ei] = block[i];
-                    block[i] = None;
-                }
-            }
-        }
-    }
-
-    println!("{disk:?}");
-     */
+    let cs = compute_checksum(&disk);
+    println!("Part 2: {cs}")
 }
 
 fn main() {
