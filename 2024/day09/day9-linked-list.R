@@ -146,6 +146,10 @@ walk(disk_as_list(), ~{
 system.time(
   disk$defrag()
 )
+#     user    system   elapsed
+#92214.667    14.645 92271.183
+
+# 88100595464 - CORRECT! Amazing, lol.
 disk$read_all() %>%
   set_names(seq(0,length(.) - 1)) %>%
   imap_int(~{
