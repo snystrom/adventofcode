@@ -105,7 +105,10 @@ fn get_empty_block_map(disk: &Vec<Option<i64>>) -> BTreeMap<usize, VecDeque<usiz
                     .or_insert_with(VecDeque::new)
                     .push_back(cur.to_owned())
             } else {
-                block_id += 1
+                block_id += 1;
+                empty_disk_blocks.entry(block_id)
+                        .or_insert_with(VecDeque::new)
+                        .push_back(cur.to_owned())
             }
         } else {
             empty_disk_blocks.entry(block_id)
@@ -119,15 +122,7 @@ fn get_empty_block_map(disk: &Vec<Option<i64>>) -> BTreeMap<usize, VecDeque<usiz
     empty_disk_blocks
 }
 
-fn part2() {
-    //let mut disk = decompress(read_disk("input.txt"));
-    let mut disk = decompress(read_disk("example.txt"));
-    println!("{disk:?}");
-
-
-    let mut empty_disk_blocks = get_empty_block_map(&disk);
-    println!("{empty_disk_blocks:?}");
-
+fn get_file_blocks(disk: &Vec<Option<i64>>) -> BTreeMap::<usize, Vec<usize>> {
     let occ_loc : Vec<usize> = disk.iter()
         .enumerate()
         .filter(|(_, value)| value.is_some())
@@ -135,32 +130,90 @@ fn part2() {
         .collect();
 
     // hold the spots to insert each file block
-    let mut file_blocks_rev = BTreeMap::new();
-    let file_blocks = disk.rsplit(|x| x.is_none()); // blocks @ ends
+    let mut file_blocks = BTreeMap::new();
 
     let mut block_id = 0;
     let mut prev = None;
     for cur in occ_loc.iter() {
+        let cur_file = unsafe { *disk.get_unchecked(*cur) };
+
+        // If we're at start, initialize at block 0
+        if prev.is_none() {
+            file_blocks.entry(block_id)
+                .or_insert_with(Vec::new)
+                .push(cur.to_owned())
+        }
+
         if let Some(p) = prev {
-            if *cur == p + 1 {
-                file_blocks_rev.entry(block_id)
-                    .or_insert_with(VecDeque::new)
-                    .push_back(cur.to_owned())
+            // SAFETY: these are idx's so must be inbounds
+            if cur_file == p {
+                file_blocks.entry(block_id)
+                    .or_insert_with(Vec::new)
+                    .push(cur.to_owned())
             } else {
                 block_id += 1;
-                file_blocks_rev.entry(block_id)
-                    .or_insert_with(VecDeque::new)
-                    .push_back(cur.to_owned())
+                file_blocks.entry(block_id)
+                    .or_insert_with(Vec::new)
+                    .push(cur.to_owned())
             }
-            prev = Some(*cur);
+            prev = Some(cur_file);
         } else {
-            block_id += 1;
-            prev = None;
+            prev = Some(cur_file);
         }
     }
 
-    println!("{file_blocks_rev:?}");
+    file_blocks
+}
 
+fn part2() {
+    //let mut disk = decompress(read_disk("input.txt"));
+    let mut disk = decompress(read_disk("example.txt"));
+    //println!("{disk:?}");
+
+
+    let mut empty_disk_blocks = get_empty_block_map(&disk);
+    println!("{empty_disk_blocks:?}");
+
+
+    let mut file_blocks = get_file_blocks(&disk);
+    println!("{file_blocks:?}");
+
+    for (file_id, file) in file_blocks.iter_mut().rev() {
+        println!("file_id: {file_id}");
+        let mut has_moved = false;
+        for (empty_id, empty) in empty_disk_blocks.iter_mut() {
+            println!("empty_id: {empty_id}");
+            println!("{empty:?}");
+            if empty.len() >= file.len() {
+
+                // TODO: while let Some(i) = file.pop()
+                for i in file.iter() {
+                    let j = empty.pop_front().expect("Empty block has capacity because of length check");
+                    if (*i < j) {
+                        break
+                    }
+                    println!("file_i: {i}, empty_j: {j}");
+                    disk.swap(*i,j);
+                }
+                has_moved = true;
+            }
+            if (has_moved) {
+                break
+            }
+        }
+    }
+
+    println!("{disk:?}");
+
+    let x = disk.iter()
+        .map(|x| match x {
+            Some(value) => value.to_string(),
+            None => ".".to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    println!("{x}");
 
 
 
