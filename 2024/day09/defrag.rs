@@ -88,7 +88,7 @@ fn part1() {
         .filter(|(_, val)| val.is_some())
         .map(|(idx, val)| idx as i64 * val.expect("must be an i64"))
         .sum();
-    println!("Part1: {part1}")
+    println!("Part 1: {part1}")
 }
 
 fn get_empty_block_map(disk: &Vec<Option<i64>>) -> BTreeMap<usize, VecDeque<usize>> {
@@ -213,13 +213,14 @@ fn part2() {
 
     //println!("{disk:?}");
 
-    let x = disk.iter()
-        .map(|x| match x {
-            Some(value) => value.to_string(),
-            None => ".".to_string()
-        })
-        .collect::<Vec<_>>()
-        .join("");
+    // To print the defragged disk for debugging...
+    //let x = disk.iter()
+    //    .map(|x| match x {
+    //        Some(value) => value.to_string(),
+    //        None => ".".to_string()
+    //    })
+    //    .collect::<Vec<_>>()
+    //    .join("");
 
     //println!("{x}");
 
