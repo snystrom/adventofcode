@@ -87,6 +87,8 @@ blink_rle <- function(counts, n) {
 
 options(scipen = 999) # lol need scipen
 
+input <- readLines("input.txt")
+
 p1 <- blink_rle(stones_to_counts(read_stones(input)), 25)
 print(sum(unlist(p1)))
 
