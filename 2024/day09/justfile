@@ -1,0 +1,5 @@
+build:
+    rustc -C opt-level=3 defrag.rs
+
+run: build
+     ./defrag
