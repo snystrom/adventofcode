@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+paste -d'\n' \
+  <(cat $1 | fold -w 100 | sed -e 's/./\x1b[1;34m&\x1b[0m/g') \
+  <(cat $2 | fold -w 100 | sed -e 's/./\x1b[1;32m&\x1b[0m/g') | \
+	less -r
+
