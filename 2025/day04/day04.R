@@ -9,33 +9,6 @@ stack <- raw %>%
 
 stack_mat <- matrix(unlist(stack), ncol = length(stack[[1]]), byrow = TRUE)
 
-
-#adjacent_lt <- function(x, i, n_allowed = 4) {
-#  left <- tail(x[1:i], -1)
-#  right <- tail(x[i:length(x)], -1)
-#
-#  n_left <- length(left)
-#  n_right <- length(right)
-#
-#  take_right <- 8 - n_left
-#
-#  if (is_empty(left)) {
-#    left <- NA_character_
-#  }
-#  if (is_empty(right)) {
-#    right <- NA_character_
-#  }
-#
-#  adj_rolls <- sum((left == "@"), (head(right, take_right) == "@"), na.rm = TRUE)
-#  adj_rolls < n_allowed
-#}
-#
-#n_forkliftable <- function(x) {
-#  lapply(seq_along(x), function(i) {
-#    adjacent_lt(x, i)
-#  })
-#}
-
 safe_empty <- function(x,y = "") {
   if (is_empty(x)) {
     return(y)
@@ -148,23 +121,32 @@ stack_r6 <- R6::R6Class("stack", public = list(
   n_safe = 0
 ))
 
-s <- stack_r6$new(stack_mat)
-s$check_all()
-s$n_safe
+part1 <- function(x) {
+  s <- stack_r6$new(x)
+  s$check_all()
+  s$n_safe
+}
+
+print(part1(stack_mat))
+
 
 # Part 2
-ss <- stack_r6$new(stack_mat)
-ss$check_all()
-prev_safe <- ss$n_safe
-ss$use_next()
-while(TRUE) {
-  ss$check_all()
-  #print(prev_safe)
-  #print(ss$n_safe)
-  if (ss$n_safe == prev_safe) {
-    break
+part2 <- function(x) {
+  s <- stack_r6$new(x)
+  s$check_all()
+  prev_safe <- s$n_safe
+  s$use_next()
+  while(TRUE) {
+    s$check_all()
+    #print(prev_safe)
+    #print(s$n_safe)
+    if (s$n_safe == prev_safe) {
+      break
+    }
+    s$use_next()
+    prev_safe <- s$n_safe
   }
-  ss$use_next()
-  prev_safe <- ss$n_safe
+  s$n_safe
 }
-ss$n_safe
+
+print(part2(stack_mat))
